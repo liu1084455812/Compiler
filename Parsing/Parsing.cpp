@@ -7,13 +7,16 @@
 //特性：
 //支持多种数据定义
 //支持指针定义(包括多层例如 int** a;)
+//支持定义时赋值
+//语句：
+//支持变量定义，函数定义(包括定义时赋值)，赋值语句，return语句，四则运算（支持优先级），支持FOR循环，支持while循环，If、While、For均支持多层（超过两层）嵌套
+//支持控制语句
+//支持块语句
+//缺陷:
 //不支持全局变量
 //不支持数组
-//不支持定义时赋值
-//语句：
-//支持变量定义，函数定义，赋值语句，return语句，四则运算（支持优先级）
-//不支持控制语句
 //FOR循环每个分号间只能放一条语句
+//未实现比较语句
 
 //随着语法分析的编写发现原词法分析的问题：
 //没有程序结尾添加“#”属性字
@@ -60,7 +63,7 @@
 
 //支持优先级的表达式文法
 //Expression		 -> Term AssignmentTail 
-//AssignmentTail	 -> = Term AssignmentTail | ExpressionTail
+//AssignmentTail	 -> = Term AssignmentTail | ExpressionTail | Empty
 //ExpressionTail	 -> + Term ExpressionTail | - Term ExpressionTail | Empty
 //Term				 -> Factor TermTail
 //TermTail			 -> * Factor TermTail | / Factor TermTail | Empty
@@ -206,12 +209,15 @@ void Program() {
 	PrintBlank(PrefixBlank);fprintf(OUT, "<Program>\n");
 
 	NextToken();//获得下一个属性字
+	PrefixBlank++;
+	PrintBlank(PrefixBlank); fprintf(OUT, "<FUNCTIONS>\n");
 	while (Type[0] > 0) {//存在下一个属性字
 		GlobalDecl();
 	}
-
+	
+	PrintBlank(PrefixBlank); fprintf(OUT, "<FUNCTIONS>\n");
+	PrefixBlank--;
 	PrintBlank(PrefixBlank);fprintf(OUT, "</Program>\n");
-
 	PrefixBlank--;
 }
 //GlobalDecl		 -> Statements | FunctionDecl 
@@ -356,7 +362,12 @@ void ParameterDeclTail(){
 }
 //BodyDecl			 -> Statements
 void BodyDecl(){
+	//PrefixBlank++;
+	//PrintBlank(PrefixBlank); fprintf(OUT, "<FUNC_BODY>\n");
 	Statements();
+	
+	//PrintBlank(PrefixBlank); fprintf(OUT, "</FUNC_BODY>\n");
+	//PrefixBlank--;
 	return;
 }
 //Statements		 -> Statement Statements | Empty
@@ -408,21 +419,33 @@ void Statement() {//语句
 }
 //ForSatement		 -> 'for' '(' Expression ';'Expression';' Expression ')' Statement
 void ForStatement(){
-
+	PrefixBlank++;
+	PrintBlank(PrefixBlank); fprintf(OUT, "<FOR_STMT>\n");
+	Match("for"); PrintBlank(PrefixBlank); fprintf(OUT, "<keyword>"); fprintf(OUT, "for"); fprintf(OUT, "</keyword>\n");
+	Match("("); PrintBlank(PrefixBlank); fprintf(OUT, "<separator>"); fprintf(OUT, "("); fprintf(OUT, "</separator>\n");
+	Expression();
+	Match(";"); PrintBlank(PrefixBlank); fprintf(OUT, "<separator>"); fprintf(OUT, ";"); fprintf(OUT, "</separator>\n");
+	Expression();
+	Match(";"); PrintBlank(PrefixBlank); fprintf(OUT, "<separator>"); fprintf(OUT, ";"); fprintf(OUT, "</separator>\n");
+	Expression();
+	Match(")"); PrintBlank(PrefixBlank); fprintf(OUT, "<separator>"); fprintf(OUT, ")"); fprintf(OUT, "</separator>\n");
+	Statement();
+	PrintBlank(PrefixBlank); fprintf(OUT, "<FOR_STMT>\n");
+	PrefixBlank--;
 }
 //DefineSatament	 -> DefineExpression DefineSatamentTail
 void DefineSatament(){
 	PrefixBlank++;
-	PrintBlank(PrefixBlank); fprintf(OUT, "<DefineSatament>\n");
+	PrintBlank(PrefixBlank); fprintf(OUT, "<DEFIN_STMT>\n");
 	DefineExpression();
 	DefineSatamentTail();
-	PrintBlank(PrefixBlank); fprintf(OUT, "</DefineSatament>\n");
+	PrintBlank(PrefixBlank); fprintf(OUT, "</DEFIN_STMT>\n");
 	PrefixBlank--;
 }
 //DefineSatamentTail -> , ID AssignmentTail DefineSatamentTail | ;
 void DefineSatamentTail(){
 	PrefixBlank++;
-	PrintBlank(PrefixBlank); fprintf(OUT, "<DefineSatamentTail>\n");
+	PrintBlank(PrefixBlank); fprintf(OUT, "<DEFIN_STMTLIST>\n");
 
 	if (strcmp(Value, ";")==0){
 		PrefixBlank++;
@@ -438,13 +461,13 @@ void DefineSatamentTail(){
 		DefineSatamentTail();
 		PrefixBlank--;
 	}
-	PrintBlank(PrefixBlank); fprintf(OUT, "<DefineSatamentTail>\n");
+	PrintBlank(PrefixBlank); fprintf(OUT, "</DEFIN_STMTLIST>\n");
 	PrefixBlank--;
 }
 //DefineExpression	 -> PrefixTypeAndId AssignmentTail
 void DefineExpression(){
 	PrefixBlank++;
-	PrintBlank(PrefixBlank); fprintf(OUT, "<DefineExpression>\n");
+	PrintBlank(PrefixBlank); fprintf(OUT, "<DEFIN_EXPR>\n");
 
 	char DateType[AnrrySize] = "void";//确定数据类型
 	char ID[AnrrySize];
@@ -459,7 +482,7 @@ void DefineExpression(){
 	PrefixBlank--;
 	AssignmentTail();
 
-	PrintBlank(PrefixBlank); fprintf(OUT, "</DefineExpression>\n");
+	PrintBlank(PrefixBlank); fprintf(OUT, "</DEFIN_EXPR>\n");
 	PrefixBlank--;
 }
 //IfStatement		 -> 'if' '(' Expression ')' Statement ['else' Statement]
@@ -568,25 +591,31 @@ void Expression(){
 	PrintBlank(PrefixBlank); fprintf(OUT, "</EXPR>\n");
 	PrefixBlank--;
 }
-//AssignmentTail-> = Term AssignmentTail | ExpressionTail
+//AssignmentTail-> = Term AssignmentTail | ExpressionTail | Empty
 void AssignmentTail(){
-	PrefixBlank++;
-	PrintBlank(PrefixBlank); fprintf(OUT, "<AssignmentLIST>\n");
-	if (strcmp(Value, "=") == 0){
+	
+	if (strcmp(Value, "+") == 0 || strcmp(Value, "-") == 0){//AssignmentTail-> ExpressionTail
+		PrefixBlank++;
+		PrintBlank(PrefixBlank); fprintf(OUT, "<AssignmentLIST>\n");
+		ExpressionTail();
+		PrintBlank(PrefixBlank); fprintf(OUT, "</AssignmentLIST>\n");
+		PrefixBlank--;
+	}
+	else if (strcmp(Value, "=") == 0){//AssignmentTail-> = Term AssignmentTail 
+		PrefixBlank++;
+		PrintBlank(PrefixBlank); fprintf(OUT, "<AssignmentLIST>\n");
 		PrefixBlank++;
 		PrintBlank(PrefixBlank); fprintf(OUT, "<operator>"); fprintf(OUT, "="); fprintf(OUT, "</operator>\n");
 		PrefixBlank--;
 		Match("=");
-
 		Term();
 		AssignmentTail();
+		PrintBlank(PrefixBlank); fprintf(OUT, "</AssignmentLIST>\n");
+		PrefixBlank--;
 
 	}
-	else {
-		ExpressionTail();
-	}
-	PrintBlank(PrefixBlank); fprintf(OUT, "</AssignmentLIST>\n");
-	PrefixBlank--;
+	else;//AssignmentTail-> Empty
+	
 }
 //ExpressionTail	 -> + Term ExpressionTail | - Term ExpressionTail | Empty
 void ExpressionTail(){
