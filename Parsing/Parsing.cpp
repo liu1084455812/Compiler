@@ -7,12 +7,13 @@
 //特性：
 //支持多种数据定义
 //支持指针定义(包括多层例如 int** a;)
-//支持全局变量
+//不支持全局变量
 //不支持数组
 //不支持定义时赋值
 //语句：
 //支持变量定义，函数定义，赋值语句，return语句，四则运算（支持优先级）
 //不支持控制语句
+//FOR循环每个分号间只能放一条语句
 
 //随着语法分析的编写发现原词法分析的问题：
 //没有程序结尾添加“#”属性字
@@ -29,57 +30,47 @@
 //原框架中语法分析不能分析==等复杂操作符
 //原框架没有实现乘法，更何况优先级的问题！
 //原框架中函数结尾的}符号可能出现输出错误
-//原框架中FOR循环每个分号间智能放一条语句
+//原框架中FOR循环每个分号间只能放一条语句
+//原框架中未实现定义是赋值
 
 //C语言文法：
-//EBNF:
-//Program			 ->	{ GlobalDecl }+
-//GlobalDecl		 -> VariableDecl | FunctionDecl
-//注意这里两部分有相同前缀，所以判断进入哪个部分的时候应该在识别ID之后
-//VariableDecl		 ->	type { '*' } id { ',' {'*'} id } ';'
-//FunctionDecl		 ->	type { '*' } id '(' ParameterDecl ')' '{' BodyDecl '}'
-//ParameterDecl		 ->	type { '*' } id { ',' type { '*' } id }
-//BodyDecl			 ->	{ VariableDecl } { Statement }
-//Statement			 -> IfStatement | WhileStatement | '{' Statement '}'| 'return' Expression | Expression ';'
-//IfStatement		 -> 'if' '(' Expression ')' Statement ['else' Statement]
-//WhileStatement     -> 'while' '(' Expression ')' Statement
-
-//其实可以将所有的EBNF转化为BNF，但由于表述过于麻烦这里只将有必要的Statement详细展开。
-
 //BNF:
-//GlobalDecl		 -> VariableDecl | FunctionDecl 
+//Program			 ->	{ GlobalDecl }+
+//GlobalDecl		 -> Statements | FunctionDecl 
 
-//VariableDecl		 -> PrefixTypeAndId EqualExpressionTail VariableDeclTail
 //PrefixTypeAndId    -> type { '*' } id 
-//VariableDeclTail	 -> ',' {'*'} id VariableDeclTail | ";"
 
 //FunctionDecl		 -> PrefixTypeAndId '(' ParameterDecl ')' '{' BodyDecl '}'
 
-//ParameterDecl		 -> PrefixTypeAndId ParameterDeclTail | empty
-//ParameterDeclTail	 -> ',' type {'*'} id ParameterDeclTail | empty
+//ParameterDecl		 -> DefineExpression ParameterDeclTail | empty
+//ParameterDeclTail	 -> ',' DefineExpression ParameterDeclTail | empty
 
-//BodyDecl			 ->	{ VariableDecl } Statements
+//BodyDecl			 -> Statements
 
 //Statements		 -> Statement Statements | Empty
-//Statement			 -> IfStatement | WhileStatement | SonStatement | ReturnStatement | Expression_Satament
-//ReturnStatement	 -> 'return' Expression_Satament 
-//Expression_Satament-> Expression ;
+//Statement			 -> IfStatement | WhileStatement | SonStatement | ReturnStatement | ExpressionSatament | DefineSatament | ForSatement
+//ReturnStatement	 -> 'return' ExpressionSatament 
+//ExpressionSatament -> Expression ;
 //IfStatement		 -> 'if' '(' Expression ')' Statement ['else' Statement]
 //WhileStatement     -> 'while' '(' Expression ')' Statement
 //SonStatement		 -> '{' Statements '}'
+//ForSatement		 -> 'for' '(' Expression ';'Expression';' Expression ')' Statement
+//DefineSatament	 -> DefineExpression ;
+//DefineExpression	 -> PrefixTypeAndId AssignmentTail
+
+//支持优先级的表达式文法
+//Expression		 -> Term AssignmentTail 
+//AssignmentTail	 -> = Term AssignmentTail | ExpressionTail
+//ExpressionTail	 -> + Term ExpressionTail | - Term ExpressionTail | Empty
+//Term				 -> Factor TermTail
+//TermTail			 -> * Factor TermTail | / Factor TermTail | Empty
+//Factor			 -> ( Expression ) | Number | ID
+
 
 //不支持表达式的优先级文法
 //EXPR				 -> FACTOR FLIST
 //FACTOR			 -> ( Expression ) | Number | ID
 //FLIST				 -> = FACTOR FLIST | + FACTOR FLIST | - FACTOR FLIST | * FACTOR FLIST | / FACTOR FLIST | Empty
-
-//支持优先级的表达式文法
-//Expression		 -> Term EqualExpressionTail 
-//EqualExpressionTail-> = Term EqualExpressionTail | ExpressionTail
-//ExpressionTail	 -> + Term ExpressionTail | - Term ExpressionTail | Empty
-//Term				 -> Factor TermTail
-//TermTail			 -> * Factor TermTail | / Factor TermTail | Empty
-//Factor			 -> ( Expression ) | Number | ID
 
 //Token类型属性字类型
 enum { const_i = 128, Float, Char, String, Operator, Separator, Id, KW };//属性类型
@@ -100,8 +91,6 @@ void GlobalDecl();
 void FindType(char CurrentType[]);
 void PrintBlank(int PrefixBlank);
 void PrefixTypeAndId(char DateType[], char ID[]);
-void VariableDecl(char DateType[], char ID[]);
-void VariableTail(char DateType[]);
 void FunctionDecl(char DateType[], char ID[]);
 void ParameterDecl();
 void ParameterDeclTail();
@@ -109,16 +98,20 @@ void BodyDecl();
 void Statements();
 void Statement();
 void Expression();
-void EqualExpressionTail();
+void AssignmentTail();
 void ExpressionTail();
 void Term();
 void Factor();
 void TermTail();
 void ReturnStatement();
-void Expression_Satament();
+void ExpressionSatament();
 void IfStatement();
 void WhileStatement();
 void SonStatement();
+void DefineSatament();
+void DefineExpression();
+void ForStatement();
+void DefineSatamentTail();
 
 
 int main(int argc, char* argv[]){
@@ -207,6 +200,7 @@ void Match(char* Content) {
 	}
 }
 
+//Program			 ->	{ GlobalDecl }+
 void Program() {
 	PrefixBlank++;
 	PrintBlank(PrefixBlank);fprintf(OUT, "<Program>\n");
@@ -220,7 +214,7 @@ void Program() {
 
 	PrefixBlank--;
 }
-//GlobalDecl		 -> VariableDecl | FunctionDecl 
+//GlobalDecl		 -> Statements | FunctionDecl 
 void GlobalDecl() {
 	//识别内容： type { '*' } id 
 	char DateType[AnrrySize]="void";//确定数据类型
@@ -236,9 +230,6 @@ void GlobalDecl() {
 
 	if (strcmp(Value,"(")==0) {//GlobalDecl		 -> FunctionDecl
 		FunctionDecl(DateType, ID);
-	}
-	else {//GlobalDecl		 -> VariableDecl
-		VariableDecl(DateType, ID);
 	}
 
 	return;	
@@ -292,75 +283,6 @@ void PrefixTypeAndId(char DateType[], char ID[]){
 	}
 	return;
 }
-//VariableDecl		 -> PrefixTypeAndId VariableDeclTail
-void VariableDecl(char DateType[], char ID[]){
-	//识别内容:VariableDecl -> 
-	PrefixBlank++;
-	PrintBlank(PrefixBlank);fprintf(OUT, "<Variable>\n");
-
-	PrefixBlank++;
-	PrintBlank(PrefixBlank); fprintf(OUT, "<TYPE>"); fprintf(OUT, DateType); fprintf(OUT, "</TYPE>\n");
-	PrintBlank(PrefixBlank); fprintf(OUT, "<identifier>"); fprintf(OUT, ID); fprintf(OUT, "</identifier>\n");
-	PrefixBlank--;
-	
-	if (strcmp(Value, ",") == 0){
-		VariableTail(DateType);
-	}
-
-	PrintBlank(PrefixBlank); fprintf(OUT, "</Variable>\n");
-	PrefixBlank--;
-	
-
-}
-//VariableDeclTail	 -> ',' {'*'} id VariableDeclTail | ";"
-void VariableTail(char DateType[]){
-	
-	if (strcmp(Value, ";") == 0) {//VariableDeclTail	 -> ";"
-		Match(";");
-		PrefixBlank++;
-		PrintBlank(PrefixBlank); fprintf(OUT, "<VariableTail>\n");
-
-		PrefixBlank++;
-		PrintBlank(PrefixBlank); fprintf(OUT, "<separator>"); fprintf(OUT, ";"); fprintf(OUT, "</separator>\n");
-		PrefixBlank--;
-
-		PrintBlank(PrefixBlank); fprintf(OUT, "</VariableTail>\n");
-		PrefixBlank--;
-		return;
-	}
-	else if (strcmp(Value, ",") == 0){//VariableDeclTail	 -> ',' {'*'} id VariableDeclTail
-		char CurrentType[AnrrySize];
-		char NextID[AnrrySize];
-		
-		PrefixBlank++;
-		PrintBlank(PrefixBlank); fprintf(OUT, "<VariableTail>\n");
-
-		strcpy(CurrentType, DateType);//用于判断变量类型
-		PrefixBlank++;
-		PrintBlank(PrefixBlank); fprintf(OUT, "<separator>"); fprintf(OUT, ","); fprintf(OUT, "</separator>\n");
-		Match(",");//匹配","
-
-		FindType(CurrentType);//判断数据类型
-
-		if (strcmp(Type, "identifier") == 0) {//当前定义的标识符
-			strcpy(NextID, Value);
-			Match(Value);//匹配标识符
-		}
-		else{//非法定义
-			printf("Error Data  Definition\n");
-			exit(-1);
-		}
-
-		PrintBlank(PrefixBlank); fprintf(OUT, "<TYPE>"); fprintf(OUT, CurrentType); fprintf(OUT, "</TYPE>\n");
-		PrintBlank(PrefixBlank); fprintf(OUT, "<identifier>"); fprintf(OUT, NextID); fprintf(OUT, "</identifier>\n");
-		PrefixBlank--;
-
-		PrintBlank(PrefixBlank); fprintf(OUT, "</VariableTail>\n");
-		PrefixBlank--;
-		VariableTail(DateType);
-		return;
-	}
-}
 //FunctionDecl		 -> PrefixTypeAndId '(' ParameterDecl ')' '{' BodyDecl '}'
 void FunctionDecl(char DateType[], char ID[]){
 	//识别内容:'(' ParameterDecl ')' '{' BodyDecl '}'
@@ -393,37 +315,17 @@ void FunctionDecl(char DateType[], char ID[]){
 	PrintBlank(PrefixBlank);fprintf(OUT, "</FUNCTION>\n");
 	PrefixBlank--;
 }
-//ParameterDecl		 -> PrefixTypeAndId ParameterDeclTail | empty
+//ParameterDecl		 -> DefineExpression ParameterDeclTail | empty
 void ParameterDecl(){
 	if (strcmp(Value, ")") != 0){//ParameterDecl		 -> PrefixTypeAndId ParameterDeclTail
+		PrefixBlank++;
 		PrintBlank(PrefixBlank); fprintf(OUT, "<ARGS>\n");
-
-		char DateType[AnrrySize] = "void";//确定数据类型
-		char ID[AnrrySize];
-		PrefixTypeAndId(DateType, ID);//找到前缀定义类型和标识符
-
-		PrefixBlank++;
-		PrintBlank(PrefixBlank); fprintf(OUT, "<FARGS>\n");
-
-		PrefixBlank++;
-		PrintBlank(PrefixBlank); fprintf(OUT, "<TYPE>\n"); 
-		
-		PrefixBlank++;
-		PrintBlank(PrefixBlank); fprintf(OUT, "<keyword>"); fprintf(OUT, DateType); fprintf(OUT, "</keyword>\n");
 		PrefixBlank--;
-		
-		PrintBlank(PrefixBlank); fprintf(OUT, "</TYPE>\n");
-		PrintBlank(PrefixBlank); fprintf(OUT, "<identifier>"); fprintf(OUT, ID); fprintf(OUT, "</identifier>\n");
-		PrefixBlank--;
-
-		PrintBlank(PrefixBlank); fprintf(OUT, "</FARGS>\n");
-		PrefixBlank--;
-
-		if (strcmp(Value, ",") == 0){
-			ParameterDeclTail();
-		}
-
+		DefineExpression();
+		ParameterDeclTail();
+		PrefixBlank++;
 		PrintBlank(PrefixBlank); fprintf(OUT, "</ARGS>\n");
+		PrefixBlank--;
 		return;
 	}
 	else{//ParameterDecl		 -> empty
@@ -431,59 +333,30 @@ void ParameterDecl(){
 		return;
 	}
 }
-//ParameterDeclTail	 -> ',' type {'*'} id ParameterDeclTail | empty
+//ParameterDeclTail	 -> ',' DefineExpression ParameterDeclTail | empty
 void ParameterDeclTail(){
 	if (strcmp(Value, ",") == 0){//ParameterDeclTail	 -> ',' type {'*'} id ParameterDeclTail
+		PrefixBlank++;
 		PrintBlank(PrefixBlank); fprintf(OUT, "<ALIST>\n");
-
-		PrefixBlank++;
-		Match(",");
-		PrintBlank(PrefixBlank); fprintf(OUT, "<separator>"); fprintf(OUT, ","); fprintf(OUT, "</separator>\n");
-
-		char DateType[AnrrySize] = "void";//确定数据类型
-		char ID[AnrrySize];
-		PrefixTypeAndId(DateType, ID);//找到前缀定义类型和标识符
-		PrintBlank(PrefixBlank); fprintf(OUT, "<FARGS>\n");
-
-		PrefixBlank++;
-		PrintBlank(PrefixBlank); fprintf(OUT, "<TYPE>\n");
-
-		PrefixBlank++;
-		PrintBlank(PrefixBlank); fprintf(OUT, "<keyword>"); fprintf(OUT, DateType); fprintf(OUT, "</keyword>\n");
+		Match(","); PrintBlank(PrefixBlank); fprintf(OUT, "<separator>"); fprintf(OUT, ","); fprintf(OUT, "</separator>\n");
+		DefineExpression();
+		ParameterDeclTail();
+		
+		PrintBlank(PrefixBlank); fprintf(OUT, "</ALIST>\n");
 		PrefixBlank--;
-
-		PrintBlank(PrefixBlank); fprintf(OUT, "</TYPE>\n");
-		PrintBlank(PrefixBlank); fprintf(OUT, "<identifier>"); fprintf(OUT, ID); fprintf(OUT, "</identifier>\n");
-		PrefixBlank--;
-
-		PrintBlank(PrefixBlank); fprintf(OUT, "</FARGS>\n");
-		PrefixBlank--;
-
-		if (strcmp(Value, ",") == 0){
-			ParameterDeclTail();
-		}
-
 		return;
 	}
 	else if (strcmp(Value, ")") == 0){//ParameterDeclTail	 -> empty
+		PrefixBlank++;
 		PrintBlank(PrefixBlank); fprintf(OUT, "<ALIST />\n");
+		PrefixBlank--;
 		return;
 	}
 	
 }
-//BodyDecl			 ->	{ VariableDecl } { Statement }
+//BodyDecl			 -> Statements
 void BodyDecl(){
-	while (strcmp(Type, "keyword")==0 || strcmp(Value, "}")!=0){//VariableDecl//Statement
-		if (strcmp(Type, "keyword") == 0 && strcmp(Value, "return") != 0){
-			char DateType[AnrrySize] = "void";//确定数据类型
-			char ID[AnrrySize];
-			PrefixTypeAndId(DateType, ID);//找到前缀定义类型和标识符
-			VariableDecl(DateType, ID);
-		}
-		else if (strcmp(Value, "}") != 0){
-			Statements();
-		}	
-	} 
+	Statements();
 	return;
 }
 //Statements		 -> Statement Statements | Empty
@@ -503,7 +376,7 @@ void Statements(){
 		PrefixBlank--;
 	}
 }
-//Statement			 -> IfStatement | WhileStatement | SonStatement | ReturnStatement | Expression_Satament
+//Statement			 -> IfStatement | WhileStatement | SonStatement | ReturnStatement | ExpressionSatament | DefineSatament | ForSatement
 void Statement() {//语句
 	PrefixBlank++;
 	PrintBlank(PrefixBlank); fprintf(OUT, "<STMT>\n");
@@ -520,11 +393,73 @@ void Statement() {//语句
 	else if (strcmp(Value, "while") == 0){
 		WhileStatement();
 	}
-	else {// Expression_Satament表达式语句
-		Expression_Satament();
+	else if (strcmp(Value, "for") == 0){
+		ForStatement();
+	}
+	else if (strcmp(Type, "keyword") == 0){
+		DefineSatament();
+	}
+	else {// ExpressionSatament表达式语句
+		ExpressionSatament();
 	}
 	
 	PrintBlank(PrefixBlank); fprintf(OUT, "</STMT>\n");
+	PrefixBlank--;
+}
+//ForSatement		 -> 'for' '(' Expression ';'Expression';' Expression ')' Statement
+void ForStatement(){
+
+}
+//DefineSatament	 -> DefineExpression DefineSatamentTail
+void DefineSatament(){
+	PrefixBlank++;
+	PrintBlank(PrefixBlank); fprintf(OUT, "<DefineSatament>\n");
+	DefineExpression();
+	DefineSatamentTail();
+	PrintBlank(PrefixBlank); fprintf(OUT, "</DefineSatament>\n");
+	PrefixBlank--;
+}
+//DefineSatamentTail -> , ID AssignmentTail DefineSatamentTail | ;
+void DefineSatamentTail(){
+	PrefixBlank++;
+	PrintBlank(PrefixBlank); fprintf(OUT, "<DefineSatamentTail>\n");
+
+	if (strcmp(Value, ";")==0){
+		PrefixBlank++;
+		Match(";"); PrintBlank(PrefixBlank); fprintf(OUT, "<separator>"); fprintf(OUT, ";"); fprintf(OUT, "</separator>\n");
+		PrefixBlank--;
+	}
+	else if (strcmp(Value, ",") == 0){
+		PrefixBlank++;
+		Match(","); PrintBlank(PrefixBlank); fprintf(OUT, "<separator>"); fprintf(OUT, ","); fprintf(OUT, "</separator>\n");
+		PrintBlank(PrefixBlank); fprintf(OUT, "<identifier>"); fprintf(OUT,Value); fprintf(OUT, "</identifier>\n");
+		Match(Value);
+		AssignmentTail();
+		DefineSatamentTail();
+		PrefixBlank--;
+	}
+	PrintBlank(PrefixBlank); fprintf(OUT, "<DefineSatamentTail>\n");
+	PrefixBlank--;
+}
+//DefineExpression	 -> PrefixTypeAndId AssignmentTail
+void DefineExpression(){
+	PrefixBlank++;
+	PrintBlank(PrefixBlank); fprintf(OUT, "<DefineExpression>\n");
+
+	char DateType[AnrrySize] = "void";//确定数据类型
+	char ID[AnrrySize];
+	PrefixTypeAndId(DateType, ID);//找到前缀定义类型和标识符
+	PrefixBlank++;
+	PrintBlank(PrefixBlank); fprintf(OUT, "<TYPE>\n");
+	PrefixBlank++;
+	PrintBlank(PrefixBlank); fprintf(OUT, "<keyword>"); fprintf(OUT, DateType); fprintf(OUT, "</keyword>\n");
+	PrefixBlank--;
+	PrintBlank(PrefixBlank); fprintf(OUT, "</TYPE>\n");
+	PrintBlank(PrefixBlank); fprintf(OUT, "<identifier>"); fprintf(OUT, ID); fprintf(OUT, "</identifier>\n");
+	PrefixBlank--;
+	AssignmentTail();
+
+	PrintBlank(PrefixBlank); fprintf(OUT, "</DefineExpression>\n");
 	PrefixBlank--;
 }
 //IfStatement		 -> 'if' '(' Expression ')' Statement ['else' Statement]
@@ -556,7 +491,7 @@ void IfStatement(){
 
 	PrefixBlank--;
 
-	PrintBlank(PrefixBlank); fprintf(OUT, "<IF_STMT>\n");
+	PrintBlank(PrefixBlank); fprintf(OUT, "</IF_STMT>\n");
 	PrefixBlank--;
 }
 //SonStatement		 -> '{' Statements '}'
@@ -589,7 +524,7 @@ void WhileStatement(){
 	PrintBlank(PrefixBlank); fprintf(OUT, "<WHILE_STMT>\n");
 	PrefixBlank--;
 }
-//ReturnStatement	 -> 'return' Expression_Satament 
+//ReturnStatement	 -> 'return' ExpressionSatament 
 void ReturnStatement(){
 	PrefixBlank++;
 	PrintBlank(PrefixBlank); fprintf(OUT, "<RET_STMT>\n");
@@ -600,14 +535,14 @@ void ReturnStatement(){
 	PrefixBlank--;
 
 	if (strcmp(Value, ";") != 0){
-		Expression_Satament();
+		ExpressionSatament();
 	}
 
 	PrintBlank(PrefixBlank); fprintf(OUT, "</RET_STMT>\n");
 	PrefixBlank--;
 }
-//Expression_Satament -> Expression ;
-void Expression_Satament(){
+//ExpressionSatament -> Expression ;
+void ExpressionSatament(){
 	PrefixBlank++;
 	PrintBlank(PrefixBlank); fprintf(OUT, "<EXPR_STMT>\n");
 
@@ -622,21 +557,21 @@ void Expression_Satament(){
 	PrintBlank(PrefixBlank); fprintf(OUT, "<\EXPR_STMT>\n");
 	PrefixBlank--;
 }
-//Expression		 -> Term EqualExpressionTail 
+//Expression		 -> Term AssignmentTail 
 void Expression(){
 	PrefixBlank++;
 	PrintBlank(PrefixBlank); fprintf(OUT, "<EXPR>\n");
 	
 	Term();
-	EqualExpressionTail();
+	AssignmentTail();
 
 	PrintBlank(PrefixBlank); fprintf(OUT, "</EXPR>\n");
 	PrefixBlank--;
 }
-//EqualExpressionTail-> = Term EqualExpressionTail | ExpressionTail
-void EqualExpressionTail(){
+//AssignmentTail-> = Term AssignmentTail | ExpressionTail
+void AssignmentTail(){
 	PrefixBlank++;
-	PrintBlank(PrefixBlank); fprintf(OUT, "<EqualEXPRLIS>\n");
+	PrintBlank(PrefixBlank); fprintf(OUT, "<AssignmentLIST>\n");
 	if (strcmp(Value, "=") == 0){
 		PrefixBlank++;
 		PrintBlank(PrefixBlank); fprintf(OUT, "<operator>"); fprintf(OUT, "="); fprintf(OUT, "</operator>\n");
@@ -644,13 +579,13 @@ void EqualExpressionTail(){
 		Match("=");
 
 		Term();
-		EqualExpressionTail();
+		AssignmentTail();
 
 	}
 	else {
 		ExpressionTail();
 	}
-	PrintBlank(PrefixBlank); fprintf(OUT, "</EqualEXPRLIS>\n");
+	PrintBlank(PrefixBlank); fprintf(OUT, "</AssignmentLIST>\n");
 	PrefixBlank--;
 }
 //ExpressionTail	 -> + Term ExpressionTail | - Term ExpressionTail | Empty
